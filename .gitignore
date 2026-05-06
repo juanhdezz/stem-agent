@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+
+# Pytest
+.pytest_cache/
+
+# Editor/OS
+.DS_Store
+
+# Outputs
+/data/outputs/latest/
