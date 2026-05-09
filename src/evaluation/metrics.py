@@ -1,18 +1,50 @@
 from __future__ import annotations
 
+import re
 from typing import List, Tuple
 
 from src.models.eval_result import Metric
+
+
+_STOPWORDS = {
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "to",
+    "of",
+    "for",
+    "is",
+    "when",
+    "with",
+    "via",
+    "be",
+    "will",
+    "not",
+}
 
 
 def _normalize(text: str) -> str:
     return " ".join(text.lower().strip().split())
 
 
+def _tokens(text: str) -> List[str]:
+    cleaned = re.sub(r"[^a-z0-9\s]", " ", _normalize(text))
+    return [token for token in cleaned.split() if token and token not in _STOPWORDS]
+
+
 def _is_match(predicted: str, expected: str) -> bool:
     p = _normalize(predicted)
     e = _normalize(expected)
-    return e in p or p in e
+    if e in p or p in e:
+        return True
+    p_tokens = set(_tokens(p))
+    e_tokens = set(_tokens(e))
+    if not p_tokens or not e_tokens:
+        return False
+    overlap = len(p_tokens & e_tokens)
+    return overlap / max(len(e_tokens), 1) >= 0.6
 
 
 def _count_matches(predicted: List[str], expected: List[str]) -> Tuple[int, int, int]:

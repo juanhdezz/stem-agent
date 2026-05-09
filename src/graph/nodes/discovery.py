@@ -25,7 +25,8 @@ from src.tools.web_search import search
 SYSTEM_PROMPT = (
     "You are an expert research syntheses agent. "
     "Summarize how specialists approach the given task class. "
-    "Extract concrete strategies, tools, and heuristics as bullet points."
+    "Extract concrete strategies, tools, and heuristics as bullet points. "
+    "Focus on transferable methods that can generalize beyond QA." 
 )
 
 

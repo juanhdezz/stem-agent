@@ -1,0 +1,21 @@
+{
+  "score": 0.1801801801801802,
+  "metrics": [
+    {
+      "name": "precision",
+      "value": 0.10810810810810811,
+      "description": "Fraction of reported issues that are correct."
+    },
+    {
+      "name": "recall",
+      "value": 0.5405405405405406,
+      "description": "Fraction of expected issues that were found."
+    },
+    {
+      "name": "f1",
+      "value": 0.1801801801801802,
+      "description": "Harmonic mean of precision and recall."
+    }
+  ],
+  "notes": "Evaluated on 37 samples."
+}

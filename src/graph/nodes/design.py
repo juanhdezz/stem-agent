@@ -62,6 +62,7 @@ def design_node(state: StemAgentState) -> dict:
     iteration = state.get("iteration", 0)
     previous_score = state.get("current_score")
     previous_config = state.get("current_config")
+    eval_results = state.get("eval_results", [])
 
     system_prompt_seed = generate_system_prompt(
         task_class=state["task_class"],
@@ -71,6 +72,14 @@ def design_node(state: StemAgentState) -> dict:
     )
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    history_note = ""
+    if eval_results:
+        latest = eval_results[-1]
+        history_note = (
+            "\nPrevious evaluation summary:\n"
+            + "\n".join(f"- {metric.name}: {metric.value:.3f}" for metric in latest.metrics)
+        )
+
     messages = [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(
@@ -79,6 +88,7 @@ def design_node(state: StemAgentState) -> dict:
                 "tools is a list of {name, description, enabled}.\n"
                 "flow is a list of {name, instructions}.\n"
                 f"Seed prompt:\n{system_prompt_seed}"
+                f"{history_note}"
             )
         ),
     ]
