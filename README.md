@@ -1,6 +1,5 @@
 # 🧬 StemAgent — Agente Base Auto-Especializable
 
-> **Reto Técnico · JetBrains AI Internship**  
 > Dominio elegido: **Code Review / QA automatizado**
 
 ---
@@ -44,34 +43,10 @@ El resultado **no** es un agente universal: es un agente que se ha vuelto espec�
 - ¿Cómo se reconstruye sin fallar en el proceso?
 - ¿Cómo sabe cuándo está suficientemente especializado para parar?
 
----
-
-## Entregables Requeridos
-
-| # | Entregable | Estado |
-|---|------------|--------|
-| 1 | Código funcional y ejecutable con instrucciones de setup | 🔧 En desarrollo |
-| 2 | Comparación medible antes/después (métricas) | 🔧 En desarrollo |
-| 3 | Informe (máx. 4 páginas): enfoque, experimentos, sorpresas, fallos, mejoras futuras | 🔧 En desarrollo |
-
-### Sobre el informe
-JetBrains indica explícitamente: **"Leemos su informe antes de revisar su código."**  
-El proceso de pensamiento, especialmente cuando las cosas fallan, es parte de lo que se evalúa.
 
 ---
 
-## Criterios de Evaluación
-
-Según JetBrains, evalúan:
-
-- **La elección del dominio y por qué** — la decisión en sí es parte del ejercicio
-- **El proceso de pensamiento** — especialmente ante errores y decisiones difíciles
-- **Que el código sea funcional y ejecutable**
-- **Que la comparación antes/después sea medible** (no subjetiva)
-
----
-
-## Nuestro Enfoque
+## El Enfoque
 
 ### Dominio elegido: Code Review / QA automatizado
 
@@ -410,4 +385,4 @@ Un criterio de parada subjetivo ("cuando crea que está listo") sería imposible
 
 ---
 
-*Reto técnico JetBrains AI Internship — Desarrollado por [Tu Nombre]*
+*Desarrollado por Juan Hernández Sánchez-Agesta*
