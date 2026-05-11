@@ -375,10 +375,6 @@ Un criterio de parada subjetivo ("cuando crea que está listo") sería imposible
 
 ---
 
-## Contexto para el Agente
-
-> **Nota para uso como contexto**: Este README contiene toda la información necesaria para entender el problema, el enfoque y la arquitectura. Al iniciar una nueva sesión de trabajo, proporcionar este documento como contexto es suficiente para retomar el diseño y la implementación desde cualquier punto.
-
 
 
 ---
