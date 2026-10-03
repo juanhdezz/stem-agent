@@ -1,382 +1,126 @@
-# 🧬 StemAgent — Agente Base Auto-Especializable
+# StemAgent
 
-> Dominio elegido: **Code Review / QA automatizado**
+**Un agente base que se especializa solo.** Recibe una clase de problemas, investiga cómo la abordan los expertos, diseña su propia configuración, se mide contra un benchmark y repite hasta que es lo bastante bueno. Entonces se "cristaliza" en un agente especializado y reutilizable.
 
----
-
-## 📋 Índice
-
-1. [El Problema](#el-problema)
-2. [Entregables Requeridos](#entregables-requeridos)
-3. [Criterios de Evaluación](#criterios-de-evaluación)
-4. [Nuestro Enfoque](#nuestro-enfoque)
-5. [Arquitectura](#arquitectura)
-6. [Stack Tecnológico](#stack-tecnológico)
-7. [Estructura del Proyecto](#estructura-del-proyecto)
-8. [Setup e Instalación](#setup-e-instalación)
-9. [Cómo Ejecutar](#cómo-ejecutar)
-10. [Métricas y Evaluación](#métricas-y-evaluación)
-11. [Decisiones de Diseño](#decisiones-de-diseño)
-
----
-
-## El Problema
-
-### Enunciado original (JetBrains)
+Este proyecto responde a un reto planteado por JetBrains:
 
 > *"Una célula madre no sabe en qué se convertirá. Interpreta señales de su entorno y se transforma [...] ¿Y si los agentes de IA funcionaran de la misma manera?"*
 
-El reto pide construir un **agente base mínimo** que, dado una **clase de problemas** (no una tarea concreta), sea capaz de:
+El dominio elegido para demostrarlo es **code review de Python**: es medible con precision, recall y F1, y hay estrategias de revisión de sobra que justifican una fase de investigación real.
 
-1. **Descubrir** cómo los expertos abordan ese tipo de problema
-2. **Decidir** qué arquitectura, herramientas y habilidades necesita
-3. **Reconstruirse** a sí mismo adoptando esa especialización
-4. **Validarse** antes de declararse listo para ejecutar
-5. **Ejecutar** ya como agente especializado
+## Cómo funciona
 
-El resultado **no** es un agente universal: es un agente que se ha vuelto específico mediante su propio proceso. Para una clase diferente de tareas, se crearía un nuevo agente base desde cero.
+El agente es un grafo de estados de [LangGraph](https://github.com/langchain-ai/langgraph) con cuatro nodos y un bucle de mejora:
 
-### Preguntas clave que plantea el reto
-
-- ¿Cómo descubre el agente la forma habitual de abordar su dominio?
-- ¿Cómo decide qué arquitectura, herramientas y habilidades adoptar?
-- ¿Cómo se reconstruye sin fallar en el proceso?
-- ¿Cómo sabe cuándo está suficientemente especializado para parar?
-
-
----
-
-## El Enfoque
-
-### Dominio elegido: Code Review / QA automatizado
-
-**¿Por qué este dominio?**
-
-- **Medible objetivamente**: existen benchmarks públicos (SWE-bench, CodeReviewer dataset, BugsInPy) con ground truth
-- **Relevante para JetBrains**: el core de su negocio son herramientas de desarrollo; un agente de QA resuena directamente
-- **Rico en estrategias diversas**: hay múltiples enfoques documentados (análisis estático, revisión semántica, detección de patrones, etc.) que justifican una fase de descubrimiento real
-- **Complejidad controlable**: el scope puede acotarse (Python, un tipo de bug, un tamaño de PR)
-
-### La metáfora aplicada
-
-```
-AGENTE BASE (célula madre)
-    │
-    ├─ Recibe: "quiero especializarme en Code Review"
-    │
-    ├─ FASE 1 - DISCOVERY
-    │   ¿Cómo hacen code review los expertos?
-    │   ¿Qué herramientas usan? ¿Qué taxonomías de bugs existen?
-    │   ¿Qué heurísticas aplican los mejores reviewers humanos?
-    │
-    ├─ FASE 2 - DESIGN  
-    │   Propone: system prompt especializado, herramientas a usar,
-    │   flujo de análisis, criterios de aceptación
-    │
-    ├─ FASE 3 - VALIDATION
-    │   Se evalúa contra N ejemplos etiquetados
-    │   Si no supera el umbral → itera el diseño
-    │   Si supera el umbral → cristaliza
-    │
-    └─ RESULTADO: Agente especializado en Code Review
-        (system prompt fijo, herramientas seleccionadas, flujo definido)
+```mermaid
+flowchart LR
+    S([task_class]) --> D[Discovery]
+    D --> X[Design]
+    X --> V[Validation]
+    V -- "F1 < umbral" --> X
+    V -- "F1 ≥ umbral o máx. iteraciones" --> C[Crystallization]
+    C --> O([agent_config.json<br>system_prompt.txt])
 ```
 
----
+| Fase | Qué hace | Código |
+|---|---|---|
+| **Discovery** | Busca en la web (Tavily) cómo se hace code review y QA, y un LLM lo resume en 6-10 estrategias concretas. | `src/graph/nodes/discovery.py` |
+| **Design** | Genera un `AgentConfig` (system prompt, herramientas y flujo de pasos) a partir de lo descubierto. Desde la segunda vuelta, usa las métricas y el prompt del intento anterior para corregirse. | `src/graph/nodes/design.py` |
+| **Validation** | Ejecuta el agente candidato sobre el benchmark, calcula precision, recall y F1, y decide si vuelve a Design o si ha terminado. | `src/graph/nodes/validation.py` |
+| **Crystallization** | Exporta el agente final a `data/outputs/latest/`. | `src/graph/nodes/crystallization.py` |
 
-## Arquitectura
+El "ADN" del agente es su system prompt: especializarse consiste en reescribirlo con evidencia (lo investigado y lo medido) en lugar de a ojo. El criterio de parada es objetivo: **F1 ≥ 0,70** o un máximo de iteraciones.
 
-### Visión general
+## Resultados
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         STEM AGENT                              │
-│                                                                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐  │
-│  │  DISCOVERY   │───▶│    DESIGN    │───▶│   VALIDATION     │  │
-│  │    NODE      │    │    NODE      │    │     NODE         │  │
-│  │              │    │              │    │                  │  │
-│  │ - Web search │    │ - Genera     │    │ - Evalúa contra  │  │
-│  │ - Lee docs   │    │   system     │    │   benchmark      │  │
-│  │ - Extrae     │    │   prompt     │    │ - Calcula        │  │
-│  │   patrones   │    │ - Selecciona │    │   métricas       │  │
-│  │   y estrateg.│    │   tools      │    │ - Decide si      │  │
-│  │              │    │ - Define     │    │   iterar o       │  │
-│  │              │    │   flujo      │    │   cristalizar    │  │
-│  └──────────────┘    └──────────────┘    └──────────────────┘  │
-│                                                  │              │
-│                          ┌───────────────────────┘              │
-│                          ▼                                      │
-│                   ¿Score >= umbral?                             │
-│                    NO ──▶ DESIGN (itera, max K rondas)         │
-│                    SÍ ──▶ CRYSTALLIZATION                       │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                   CRYSTALLIZATION                        │   │
-│  │  Exporta el agente especializado:                        │   │
-│  │  - system_prompt.txt (final, optimizado)                 │   │
-│  │  - agent_config.json (herramientas, parámetros)          │   │
-│  │  - Agente ejecutable listo para producción               │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+Benchmark propio de 37 fragmentos de Python con issues etiquetados a mano (lógica, seguridad, mantenibilidad, estilo, rendimiento y fiabilidad), en `data/benchmark/samples.jsonl`.
 
-### Grafo de estados (LangGraph)
+| Métrica | Baseline (prompt genérico) | StemAgent especializado |
+|---|---|---|
+| Precision | 0,108 | 0,788 |
+| Recall | 0,541 | 0,703 |
+| **F1** | **0,180** | **0,743** |
 
-```
-START
-  │
-  ▼
-[discovery_node]
-  │  knowledge: List[str]  (estrategias, herramientas, patrones encontrados)
-  ▼
-[design_node]
-  │  draft_config: AgentConfig  (system_prompt, tools, flow)
-  ▼
-[validation_node]
-  │  score: float  (métrica elegida, e.g. F1 en dataset de evaluación)
-  │
-  ├─── score < threshold ──▶ [design_node]  (bucle, máx. MAX_ITERATIONS)
-  │
-  └─── score >= threshold ──▶ [crystallization_node]
-                                      │
-                                    END
-```
+Las cifras del baseline están en `data/outputs/baseline_results.json`. Las del agente especializado, en `report/report.md`.
 
-### Estado del grafo
+**Cómo leer estos resultados.** La mejora es real, pero no toda viene de "revisar mejor":
+- El benchmark es pequeño y lo he creado yo, así que mide el encaje con estas etiquetas, no la calidad general de un revisor.
+- Al agente especializado se le dan en el prompt las frases canónicas del benchmark, y sus predicciones se filtran a ese vocabulario (`src/evaluation/runner.py`). El baseline no tiene ese filtro: cualquier observación fuera de las etiquetas cuenta como falso positivo, y eso penaliza su precision.
+- Durante el bucle, el umbral se comprueba con las 5 primeras muestras (`MAX_VALIDATION_SAMPLES`) para ahorrar llamadas. La evaluación final usa el benchmark completo.
 
-```python
-class StemAgentState(TypedDict):
-    # Input
-    task_class: str                    # "code_review", "security", etc.
-    
-    # Discovery
-    discovered_knowledge: List[str]    # Estrategias y patrones encontrados
-    
-    # Design (evoluciona entre iteraciones)
-    current_config: AgentConfig        # system_prompt + tools + flow
-    iteration: int                     # Número de iteración actual
-    
-    # Validation
-    eval_results: List[EvalResult]     # Historial de evaluaciones
-    current_score: float               # Score de la iteración actual
-    
-    # Output
-    final_config: Optional[AgentConfig]  # Config cristalizada
-    is_crystallized: bool
-```
+## Puesta en marcha
 
----
-
-## Stack Tecnológico
-
-| Componente | Tecnología | Razón |
-|------------|------------|-------|
-| **Orquestación de agente** | LangGraph | Control explícito del grafo de estados, fácil de inspeccionar y debuggear |
-| **LLM backbone** | OpenAI API (GPT-4o) | Potencia necesaria para razonamiento meta y generación de prompts |
-| **Búsqueda web** | Tavily API | Integración nativa con LangGraph, resultados limpios para el agente |
-| **Evaluación** | Dataset personalizado + métricas automáticas | Ground truth propio sobre el dominio elegido |
-| **Lenguaje** | Python 3.11+ | Ecosistema más maduro para agentes LLM |
-| **Config & secrets** | python-dotenv | Gestión limpia de API keys |
-| **Testing** | pytest | Pruebas unitarias de cada nodo |
-
-### Por qué LangGraph y no un SDK directo
-
-LangGraph ofrece:
-- **Estado explícito y tipado**: el `State` del grafo es auditable en cada paso
-- **Ciclos controlados**: el bucle `validation → design` es un ciudadano de primera clase
-- **Streaming y observabilidad**: logs nativos de cada nodo sin instrumentación manual
-- **Separación de concerns**: cada fase del agente (discovery, design, validation) es un nodo independiente, testeable por separado
-
----
-
-## Estructura del Proyecto
-
-```
-stem-agent/
-│
-├── README.md                    # Este archivo
-│
-├── .env.example                 # Variables de entorno requeridas
-├── requirements.txt             # Dependencias Python
-│
-├── src/
-│   ├── __init__.py
-│   │
-│   ├── graph/                   # LangGraph: definición del grafo
-│   │   ├── __init__.py
-│   │   ├── state.py             # StemAgentState y tipos auxiliares
-│   │   ├── graph.py             # Construcción del StateGraph
-│   │   └── nodes/
-│   │       ├── __init__.py
-│   │       ├── discovery.py     # Nodo: búsqueda y síntesis de conocimiento
-│   │       ├── design.py        # Nodo: generación de AgentConfig
-│   │       ├── validation.py    # Nodo: evaluación y decisión de cristalizar
-│   │       └── crystallization.py  # Nodo: exportación del agente final
-│   │
-│   ├── models/                  # Tipos de datos compartidos
-│   │   ├── __init__.py
-│   │   ├── agent_config.py      # AgentConfig, ToolSpec, FlowStep
-│   │   └── eval_result.py       # EvalResult, Metric
-│   │
-│   ├── tools/                   # Herramientas disponibles para el agente
-│   │   ├── __init__.py
-│   │   ├── web_search.py        # Búsqueda web (Tavily)
-│   │   ├── code_analysis.py     # Análisis estático básico
-│   │   └── prompt_generator.py  # Generación y refinamiento de prompts
-│   │
-│   └── evaluation/              # Sistema de evaluación
-│       ├── __init__.py
-│       ├── dataset.py           # Carga del dataset de benchmark
-│       ├── metrics.py           # F1, precision, recall, etc.
-│       └── runner.py            # Ejecuta el agente candidato contra el dataset
-│
-├── data/
-│   ├── benchmark/               # Dataset de evaluación (PR/código + labels)
-│   │   ├── samples.jsonl        # Ejemplos: {code, expected_issues, metadata}
-│   │   └── README.md            # Descripción del dataset
-│   └── outputs/                 # Agentes cristalizados (generados en runtime)
-│       └── .gitkeep
-│
-├── experiments/                 # Notebooks de análisis y experimentos
-│   ├── 01_baseline.ipynb        # Agente naive antes de especialización
-│   └── 02_evolution_trace.ipynb # Trazas de las iteraciones de evolución
-│
-├── tests/
-│   ├── test_discovery.py
-│   ├── test_design.py
-│   ├── test_validation.py
-│   └── test_full_graph.py
-│
-├── scripts/
-│   ├── run_stem_agent.py        # Entry point principal
-│   ├── run_baseline.py          # Ejecuta el agente naive para comparación
-│   └── evaluate_final.py        # Evalúa el agente cristalizado final
-│
-└── report/
-    └── report.md                # Informe final (máx. 4 páginas)
-```
-
----
-
-## Setup e Instalación
-
-### Prerrequisitos
-
-- Python 3.11+
-- API keys: OpenAI, Tavily
-
-### Instalación
+Requisitos: Python 3.10+ y claves de API de OpenAI y Tavily.
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/tu-usuario/stem-agent.git
+git clone https://github.com/juanhdezz/stem-agent.git
 cd stem-agent
-
-# 2. Crear entorno virtual
-python -m venv .venv
-source .venv/bin/activate  # En Windows: .venv\Scripts\activate
-
-# 3. Instalar dependencias
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# 4. Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus API keys
+cp .env.example .env   # y rellena OPENAI_API_KEY y TAVILY_API_KEY
 ```
-
-### Variables de entorno (`.env`)
-
-```env
-OPENAI_API_KEY=sk-...
-TAVILY_API_KEY=tvly-...
-
-# Parámetros del agente (opcionales, tienen defaults)
-MAX_ITERATIONS=5
-VALIDATION_THRESHOLD=0.70
-EVAL_DATASET_PATH=data/benchmark/samples.jsonl
-```
-
----
-
-## Cómo Ejecutar
-
-### Ejecutar el agente base completo (especialización)
 
 ```bash
-python scripts/run_stem_agent.py --task-class code_review
-```
-
-El script imprimirá el progreso de cada fase e indicará cuántas iteraciones necesitó para cristalizar. El agente resultante se guarda en `data/outputs/`.
-
-### Ejecutar el baseline (agente naive, para comparación)
-
-```bash
+# 1. Baseline: agente con prompt genérico (guarda data/outputs/baseline_results.json)
 python scripts/run_baseline.py
-```
 
-Ejecuta un agente GPT-4o con un system prompt genérico sobre el mismo dataset. Sus métricas son el "antes".
+# 2. Especialización completa: Discovery → Design ⇄ Validation → Crystallization
+python scripts/run_stem_agent.py --task-class code_review
 
-### Evaluar el agente cristalizado final
-
-```bash
+# 3. Evaluación del agente cristalizado sobre todo el benchmark, comparada con el baseline
 python scripts/evaluate_final.py --config data/outputs/latest/agent_config.json
 ```
 
-Produce la tabla de métricas "después" para incluir en el informe.
+Sin clave de Tavily, Discovery sigue funcionando con lo que sabe el LLM. Todas las llamadas usan `gpt-4o-mini`.
+
+### Variables de entorno
+
+| Variable | Por defecto | Para qué sirve |
+|---|---|---|
+| `OPENAI_API_KEY` | | LLM de todas las fases |
+| `TAVILY_API_KEY` | | Búsqueda web en Discovery (opcional) |
+| `VALIDATION_THRESHOLD` | `0.70` | F1 mínimo para cristalizar |
+| `MAX_ITERATIONS` | `5` | Vueltas máximas de Design ⇄ Validation |
+| `MAX_VALIDATION_SAMPLES` | `5` | Muestras usadas dentro del bucle (`0` = todas) |
+| `MAX_ISSUES_PER_SAMPLE` | `5` | Issues máximos por fragmento |
+| `EVAL_DATASET_PATH` | `data/benchmark/samples.jsonl` | Benchmark a usar |
+
+## Tests
+
+```bash
+pytest
+```
+
+Los tests simulan el LLM y la búsqueda web con mocks, así que no necesitan claves: cubren cada nodo y la ejecución completa del grafo.
+
+## Estructura
+
+```
+src/
+  graph/          grafo LangGraph: estado (state.py), construcción (graph.py) y un nodo por fase
+  models/         AgentConfig, ToolSpec, FlowStep, EvalResult
+  tools/          búsqueda web, análisis estático básico y generador de prompts
+  evaluation/     carga del benchmark, métricas y runner del agente candidato
+data/benchmark/   samples.jsonl y su descripción
+scripts/          baseline, especialización y evaluación final
+experiments/      notebooks del baseline y de la traza de evolución
+tests/            tests de cada nodo y del grafo completo
+report/           informe del proceso (también en stem_agent_report.pdf)
+```
+
+## Decisiones de diseño
+
+- **Code review como dominio.** Se puede medir con métricas automáticas; deep research o seguridad son más difíciles de evaluar de forma objetiva.
+- **LangGraph frente a CrewAI o AutoGen.** El bucle Validation → Design es una arista condicional explícita y el estado es tipado y auditable en cada paso. En un reto donde el proceso importa tanto como el resultado, esa transparencia es lo que se necesita.
+- **Umbral fijo como criterio de parada.** "Cuando el agente crea que está listo" no se puede verificar. Un umbral hace el proceso reproducible y la comparación antes/después objetiva.
+
+## Siguientes pasos
+
+- Evaluar con un benchmark externo (por ejemplo, BugsInPy) para medir la generalización y no solo el encaje con mis etiquetas.
+- Comparar con un baseline que use el mismo vocabulario de etiquetas, para aislar cuánto aporta la especialización.
+- Añadir un nivel de confianza por issue para reducir falsos positivos.
+- Probar clases de problemas distintas de QA (seguridad, rendimiento).
 
 ---
 
-## Métricas y Evaluación
-
-### Dataset
-
-El dataset de evaluación contiene fragmentos de código Python con bugs/issues reales y una lista de problemas esperados etiquetados manualmente. Fuente: combinación de BugsInPy y ejemplos sintéticos cubriendo:
-
-- Bugs lógicos (off-by-one, condiciones incorrectas)
-- Problemas de estilo y mantenibilidad
-- Vulnerabilidades de seguridad simples (SQL injection, path traversal)
-- Code smells (funciones demasiado largas, duplicación)
-
-### Métricas principales
-
-| Métrica | Descripción | Objetivo |
-|---------|-------------|---------|
-| **Precision** | De los issues reportados, ¿cuántos son reales? | Minimizar falsos positivos |
-| **Recall** | De los issues reales, ¿cuántos detectó? | No perder bugs críticos |
-| **F1-score** | Media armónica de precision y recall | Métrica de optimización principal |
-| **Issue Categorization Accuracy** | ¿Clasifica correctamente el tipo de issue? | Calidad del análisis |
-
-### Umbral de cristalización
-
-El agente se considera suficientemente especializado cuando alcanza **F1 ≥ 0.70** en el dataset de validación. Este umbral es deliberado: exige mejora real sobre el baseline naive (que estimamos en F1 ~0.35-0.45) sin requerir perfección imposible.
-
----
-
-## Decisiones de Diseño
-
-Esta sección documenta las decisiones clave y su razonamiento (ampliado en el informe final).
-
-### ¿Por qué Code Review y no Deep Research o Security?
-
-Deep Research: difícil de evaluar objetivamente. Security: requiere datasets especializados de acceso complicado. Code Review tiene benchmarks públicos, métricas automáticas claras y relevancia directa para JetBrains.
-
-### ¿Por qué LangGraph y no CrewAI o AutoGen?
-
-LangGraph ofrece control explícito del grafo, sin magia implícita. Los bucles de iteración (`validation → design`) son ciudadanos de primera clase. El estado es tipado y auditable. Para un reto donde el proceso importa tanto como el resultado, la transparencia del grafo es esencial.
-
-### ¿Por qué el agente modifica su propio system prompt?
-
-Es la forma más directa de implementar la metáfora: el agente "se reconstruye" editando las instrucciones que definen su comportamiento. El system prompt es el ADN del agente; modificarlo es especializarse.
-
-### ¿Por qué un umbral fijo (F1 ≥ 0.70) como criterio de parada?
-
-Un criterio de parada subjetivo ("cuando crea que está listo") sería imposible de evaluar. Un umbral fijo hace el proceso reproducible y la comparación antes/después completamente objetiva. El valor 0.70 es un balance entre ambición y viabilidad en un reto de tiempo limitado.
-
----
-
-
-
----
-
-*Desarrollado por Juan Hernández Sánchez-Agesta*
+Desarrollado por [Juan Hernández Sánchez-Agesta](https://github.com/juanhdezz).

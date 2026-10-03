@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 try:
-    from langgraph.graph import StateGraph, END, START, CompiledGraph
+    from langgraph.graph import StateGraph, END, START
+    from langgraph.graph.state import CompiledStateGraph as CompiledGraph
 except ImportError:  # pragma: no cover
     START = "__start__"
     END = "__end__"
